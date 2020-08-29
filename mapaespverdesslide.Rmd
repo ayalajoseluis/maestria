@@ -1,0 +1,398 @@
+---
+title: "Análisis espacios verdes en la Ciudad de Buenos Aires"
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+
+Universidad Nacional de San Martín
+
+Maestría de Política y Planificación del Transporte
+
+Asignatura Recolección y Análisis de Datos
+
+Alumnos
+
+- Ayala, José Luis
+
+- Rodríguez, Mónica Diana
+
+---
+
+Introducción (1 de 3)
+
+Los espacios verdes siempre fueron un tema fundamental para permitir una buena calidad vida en las ciudades. Hoy en día este aspecto cobra aún más relevancia dadas la situación de pandemia que estamos viviendo. Se busca analizar algunas características puntuales de los espacios verdes que existen en las comunas de la Ciudad Autónomas de Buenos Aires.
+
+---
+
+Introducción (2 de 3)
+
+Se considera que Domingo Faustino Sarmiento fue un pionero en impulsar y apoyar la actividad forestal en
+nuestro país. Pero fue durante la presidencia de Julio A. Roca que se institucionalizó el día del árbol que
+se celebra todos los 29 de Agosto.
+
+Los árboles son componentes estructurales de los ecosistemas naturales de nuestro país como bosques o
+selvas. El arbolado urbano, a su vez, cumple funciones relevantes en las ciudades: brindar sombra,
+refrescar el aire circundante, producir oxígeno, regular la humedad ambiental, disminuir ruidos, atenuar
+los vientos y retener el agua de lluvia.
+
+---
+
+Introducción (3 de 3)
+
+Según datos 2007 y 2014 se perdieron 44,5 ha, 36 ha de canteros, 10 ha De plazoletas, sin embargo
+aumento la superficie de jardines y plazas. El arbolado esta en estado critico.
+
+Los datos oficiales acerca del arbolado porteño provenientes del Ministerio de Espacio Público dan cuenta
+de la presencia de 425 mil árboles en nuestra ciudad, teniendo en cuenta que viven 3 millones de
+habitantes, deberían tener entonces 1 millón de árboles, faltan 575 mil ejemplares para tener un mínimo
+razonable.
+
+Del arbolado urbano vemos que los mismos reflejan no sólo la falta y pérdida de espacios verdes en la
+ciudad sino también una distribución sumamente desigual de los mismos entre comunas. La comuna más
+arbolada es la 9 (38728 árboles) y la menos arbolada es la comuna 2 (8127 árboles).
+
+---
+
+Memoria descriptiva
+
+Es bien sabido la importancia del árbol en la naturaleza, con su fotosíntesis, absorbiendo el CO2 de la
+atmosfera, liberando el oxigeno.
+Su desforestación supone el aumento de los gases de efecto invernadero, multiplicando la contaminación
+del planeta.
+Con nuestro trabajo queremos reflejar en las comunas de la CABA, la situación que vive cada habitante
+en relación con el espacio verde y su accesibilidad usando como proxy la cercanía a una estación de Ecobici.
+
+---
+
+Metodología y dimensiones
+
+- Espacios verdes por comuna (cantidad)
+
+- Arbolado por comuna (calidad)
+
+- Proximidad a Ecobici (accesibilidad) 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(leaflet)
+library(sf)
+library(sp)
+library(rgdal)
+library(rgeos)
+library(ggplot2)
+library(stringr)
+library(geosphere)
+library(htmltools)
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+verde_pub_archivo <- readOGR("espacio-verde-publico.shp", encoding = "UTF-8", verbose = FALSE)
+verde_priv_archivo <- readOGR("espacio-verde-privado.shp", encoding = "UTF-8", verbose = FALSE)
+comunas_archivo <- readOGR("comunas.shp")
+crs_str <- sp::CRS('+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0')
+comunas <- sp::spTransform(comunas_archivo,crs_str)
+verde_pub <- sp::spTransform(verde_pub_archivo,crs_str)
+verde_priv <- sp::spTransform(verde_priv_archivo,crs_str)
+habitantescomunas <- c(205886, 157932, 187537, 218245, 179005, 176076, 220591, 187237, 161797, 166022, 189832, 200116, 231331, 225970, 182574)
+centros_comunas <- data.frame(gCentroid(comunas, byid = TRUE))
+centros_comunas$comuna <- paste0("Comuna ", comunas$COMUNAS)
+```
+
+---
+
+Espacios verdes por comuna 
+
+Existen diferentes características de espacios verdes en cada comuna de la ciudad. Algunos son privados, otros públicos y estos últimos a su vez tienen un conjunto diverso de instalaciones que les confieren prestaciones particulares. En los siguientes mapas y gráficos se mostrará esta información.
+
+
+- Mapa espacios verdes
+- Espacios verdes públicos y privados por comuna
+- Proporción de espacio verde público por habitante
+- Mapa espacio verde público por habitante
+
+---
+
+Espacios verdes por comuna - Mapa espacios verdes 
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+df_instalaciones_pub <- data.frame(verde_pub$patio_de_j, verde_pub$Canil, verde_pub$Posta_aero, verde_pub$REJA)
+colnames(df_instalaciones_pub) <- c("patiojuegos", "canil", "postaaero", "reja")
+df_instalaciones_pub <- df_instalaciones_pub %>% mutate(
+  patiojuegos = ifelse(patiojuegos == "SI", "Patio de juegos ", ""),
+  canil = ifelse(canil == "SI", "Canil ", ""),
+  postaaero = ifelse(postaaero == "SI", "Posta aeróbica ", ""),
+  reja = ifelse(!is.na(reja), "Reja ", ""),
+  instalaciones = paste0(patiojuegos, canil, postaaero, reja, sep = " ")
+)
+instalaciones <- str_remove_all(df_instalaciones_pub$instalaciones, "NA")
+instalaciones <- ifelse(instalaciones == " ", "No", instalaciones)
+
+observaciones <- ifelse(is.na(verde_priv$Observacio),"No",as.character(verde_priv$Observacio))
+
+
+
+etiquetas_pub <- sprintf(
+  "<strong>Espacio público %s</strong><br/>Comuna: %g <br/>Area: %g m2<br/>Instalaciones: %s ",
+  verde_pub$nombre, verde_pub$COMUNA, verde_pub$area, instalaciones
+) %>% lapply(htmltools::HTML)
+
+etiquetas_priv <- sprintf(
+  "<strong>Espacio privado %s</strong><br/>Comuna: %g <br/>Area: %g m2 <br/>Observaciones: %s ",
+  verde_priv$nombre, verde_priv$COMUNA, verde_priv$area, observaciones
+) %>% lapply(htmltools::HTML)
+
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.PositronNoLabels)%>%
+  addLabelOnlyMarkers(data = centros_comunas,
+                      lng = ~x,
+                      lat = ~y,
+                      label = ~comuna,
+                      labelOptions = labelOptions(noHide = TRUE, direction = 'top', textOnly = TRUE))%>%
+ addPolygons(data = comunas,
+              fillOpacity = 0,
+              weight = 0.5) %>%
+ addPolygons(data = verde_priv,
+              fillColor = "blue",
+              weight = 0.1,
+              fillOpacity = 1,
+              label = etiquetas_priv)%>%
+ addPolygons(data = verde_pub,
+              fillColor = "green",
+              weight = 0.1,
+              fillOpacity = 1,
+              label = etiquetas_pub)
+ 
+  
+                     
+```
+
+---
+
+Espacios verdes por comuna - Espacios verdes públicos y privados por comuna
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+df_priv <- data.frame(verde_priv$COMUNA, verde_priv$area)
+df_pub <- data.frame(verde_pub$COMUNA, verde_pub$area)
+colnames(df_priv) <- c("comuna", "area")
+colnames(df_pub) <- c("comuna", "area")
+df_pub <- df_pub %>% filter(comuna != 0)
+df_priv$tipo <- rep("privado", length(df_priv$area))
+df_pub$tipo <- rep("publico", length(df_pub$area))
+df_area_verde <- rbind(df_pub, df_priv) %>% group_by(comuna, tipo) %>% summarize(area = sum(round(area)))
+ggplot(df_area_verde, aes(fill = tipo, x = comuna, y = area)) + 
+  geom_bar(position = "stack", stat = "identity") +
+  labs(title = "Espacio verde en cada comuna según tipo")+
+  scale_y_continuous(labels = scales::comma)+
+  scale_x_discrete(limits = 1:15, labels = 1:15)+
+  scale_fill_discrete(name="Tipo\nespacio\nverde",
+  breaks=c("privado", "publico"),
+  labels=c("Privado", "Público"))+
+  scale_fill_manual(values = c("blue", "green"))
+```
+
+---
+
+Espacios verdes por comuna - Proporción de espacio verde público por habitante
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+df_area_verde_pub <- df_area_verde %>% filter(tipo == "publico") %>% mutate(comuna_txt = paste0("Comuna ", comuna))
+df_area_verde_pub$habitantes <- habitantescomunas
+df_area_verde_pub <- df_area_verde_pub %>% mutate(espverdehab = round(area/habitantes,1))
+
+ggplot(df_area_verde_pub, aes(x = comuna, y = espverdehab)) + 
+  geom_bar(stat = "identity", color = "green", fill = "green") +
+  scale_y_continuous(labels = scales::comma) +
+  scale_x_discrete(limits = 1:15, labels = 1:15)
+
+
+```
+
+---
+
+Espacios verdes por comuna - Mapa espacio verde público por habitante
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+listacomunas <- comunas$COMUNAS
+
+df_area_verde_pub <- df_area_verde_pub[match(listacomunas, df_area_verde_pub$comuna),]
+
+pal <- colorBin("RdYlGn", domain = df_area_verde_pub$espverdehab, bins = c(0, 1, 2, 4, 6, 8, 10, 25))
+
+etiquetas <- sprintf(
+  "<strong>Comuna %s</strong><br/>Habitantes (censo 2010) %g <br/>Espacios verdes públicos %d m2 <br/>Proporción m2 espacio verde por habitante %g ",
+  df_area_verde_pub$comuna, df_area_verde_pub$habitantes, df_area_verde_pub$area, df_area_verde_pub$espverdehab
+) %>% lapply(htmltools::HTML)
+
+leaflet(comunas) %>%
+  addProviderTiles(providers$CartoDB.PositronNoLabels)%>%
+  addPolygons(
+    fillColor = ~pal(df_area_verde_pub$espverdehab),
+    weight = 0.1,
+    fillOpacity = 1,
+    label = etiquetas,
+    highlight = highlightOptions(
+      weight = 5,
+      color = "#666",
+      fillOpacity = 0.7,
+      bringToFront = FALSE)
+  )%>% addLegend(pal = pal, values = ~df_area_verde_pub$espverdehab, opacity = 1, title = "Espacio verde público por habitante",
+  position = "bottomright")
+```
+
+---
+
+Arbolado por comuna 
+
+Usamos la cantidad de árboles para determinar la calidad de los espacios verdes. como se mencionó anteriormente los árboles proveen capacidad de renovación del aire y esto mejora su calidad.
+
+- Cantidad de árboles
+- Arbolado por habitante
+- Mapa árboles cada mil habitantes
+
+---
+
+Arbolado por comuna - Cantidad de árboles
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+df_arboles_lineal_archivo <- read.csv(file = "arbolado-publico-lineal-2017-2018.csv", stringsAsFactors = FALSE, encoding = "UTF-8")
+df_arboles_verde_archivo <- read.csv(file = "arbolado-en-espacios-verdes.csv", stringsAsFactors = FALSE, encoding = "UTF-8")
+#Esto por que el archivo de verde no incluye la info de comuna entonces hay que proyectarla y hacer la intersección
+df_arboles_lineal_sp <- SpatialPointsDataFrame(df_arboles_verde_archivo[,c("long", "lat")], df_arboles_verde_archivo[,3:15], proj4string = crs_str)
+df_intersect_arboles <- over(df_arboles_lineal_sp, comunas)
+df_arboles_verde_archivo$comuna <- df_intersect_arboles$COMUNAS 
+df_arboles_verde_archivo$tipo <- rep("espacio verde", length(df_arboles_verde_archivo$id_arbol))
+df_arboles_verde_archivo <- df_arboles_verde_archivo %>% select(comuna, tipo)
+df_arboles_lineal_archivo$tipo <- str_to_lower(df_arboles_lineal_archivo$tipo_activ) %>% str_replace_all(" ", "")
+df_arboles_lineal_archivo <- df_arboles_lineal_archivo %>% select(comuna, tipo)
+df_arboles_comp <- rbind(df_arboles_lineal_archivo, df_arboles_verde_archivo) %>% group_by(comuna, tipo) %>% summarize(arboles = n()) %>% drop_na()
+
+ggplot(df_arboles_comp, aes(fill = tipo, x = comuna, y = arboles)) + 
+  geom_bar(position = "stack", stat = "identity") +
+  scale_y_continuous(labels = scales::comma)+
+  scale_x_discrete(limits = 1:15, labels = 1:15)
+
+```
+
+---
+
+Arbolado por comuna - Arbolado por habitante
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+df_arboles_total <- df_arboles_comp %>% group_by(comuna) %>% summarize(cantarboles = sum(arboles))
+df_arboles_total$habitantes <- habitantescomunas
+df_arboles_total <- df_arboles_total %>% mutate(arbpormilhab = round((df_arboles_total$cantarboles/df_arboles_total$habitantes)*1000))
+ggplot(df_arboles_total, aes(x = comuna, y = arbpormilhab)) + 
+  geom_bar(stat = "identity", color = "green", fill = "green") +
+  scale_y_continuous(labels = scales::comma) +
+  scale_x_discrete(limits = 1:15, labels = 1:15)
+```
+
+
+---
+
+Arbolado por comuna - Mapa árboles cada mil habitantes
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+df_arboles_total <- df_arboles_total[match(listacomunas, df_arboles_total$comuna),]
+
+pal_arb <- colorBin("RdYlGn", domain = df_arboles_total$arbpormilhab, bins = c(50, 100, 150, 200, 250))
+
+etiquetas <- sprintf(
+  "<strong>Comuna %s</strong><br/>Habitantes (censo 2010) %g <br/>Cantidad total de árboles %d<br/>Proporción árboles por habitante %g ",
+  df_arboles_total$comuna, df_arboles_total$habitantes, df_arboles_total$cantarboles, df_arboles_total$arbpormilhab
+) %>% lapply(htmltools::HTML)
+
+leaflet(comunas) %>%
+  addProviderTiles(providers$CartoDB.PositronNoLabels)%>%
+  addPolygons(
+    fillColor = ~pal_arb(df_arboles_total$arbpormilhab),
+    weight = 0.1,
+    fillOpacity = 1,
+    label = etiquetas,
+    highlight = highlightOptions(
+      weight = 5,
+      color = "#666",
+      fillOpacity = 0.7,
+      bringToFront = FALSE)
+  )%>% addLegend(pal = pal_arb, values = ~df_arboles_total$arbpormilhab, opacity = 1, title = "Árboles cada mil habitantes",
+  position = "bottomright")
+```
+
+---
+
+Distancia a estación Ecobici
+
+Un tema fundamental en el acceso a los espacios verdes es como llegar a ellos. Teniendo en cuenta que actualmente se desaconseja el uso transporte público para fines recreativos se utiliza la distancia a la estación más próxima de Ecobici como indicador de accesibilidad sustentable.
+
+En este caso la distancia va desde 0 metros para las estaciones ubicadas en medio de un espacio verde público hasta más de 5km para las zonas más alejadas.
+
+---
+
+Distancia a estación Ecobici - Mapa
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+df_estaciones_ecobici_full <- read.csv(file = "nuevas-estaciones-bicicletas-publicas.csv", stringsAsFactors = FALSE, encoding = "UTF-8")
+df_estaciones_ecobici <- df_estaciones_ecobici_full %>% select(long, lat)
+centros_pub <- gCentroid(verde_pub, byid = TRUE)
+dist_pub <- data.frame(dist2Line(centros_pub, df_estaciones_ecobici))
+dist_pub$distance <- round(dist_pub$distance)
+pal_dist <- colorBin("RdYlGn", domain = dist_pub$distance, bins = c(0, 200, 500, 1000, 2000, 5000, 10000), reverse = TRUE)
+etiquetas_dist <- sprintf(
+  "<strong>Espacio publico %s</strong><br/>Comuna: %g <br/>Distancia a Ecobici: %g metros<br/>",
+  verde_pub$nombre, verde_pub$COMUNA, dist_pub$distance
+) %>% lapply(htmltools::HTML)
+
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.PositronNoLabels)%>%
+  addLabelOnlyMarkers(data = centros_comunas,
+                      lng = ~x,
+                      lat = ~y,
+                      label = ~comuna,
+                      labelOptions = labelOptions(noHide = TRUE, direction = 'top', textOnly = TRUE))%>%
+ addPolygons(data = comunas,
+              fillOpacity = 0,
+              weight = 0.5) %>%
+ addPolygons(data = verde_pub,
+              fillColor = ~pal_dist(dist_pub$distance),
+              weight = 0.1,
+              fillOpacity = 1,
+              label = etiquetas_dist)%>%
+  addLegend(pal = pal_dist, values = dist_pub$distance, opacity = 1, title = "Distancia a estación Ecobici más cercana (m)",position = "bottomright")%>%
+  addCircleMarkers(data = df_estaciones_ecobici, lat = ~lat, lng = ~long,radius = 2, fillOpacity = 1, fillColor = "black", opacity = 0, popup = ~htmlEscape(df_estaciones_ecobici_full$nombre_estacion))
+ 
+  
+
+```
+
+---
+
+Conclusiones (1 de 2)
+
+Se ha podido determinar que cantidad de espacios verdes públicos tiene cada habitante en su comuna, si bien hay
+espacios privados que no son de acceso al habitante estos igual aportan a la calidad de vida en menor medida.
+
+Podemos verificar grandes desigualdades en cuanto a las características de espacios verdes al interior de cada comuna. Algunas comunas cuentan con gran cantidad de espacios verdes como la 1, la 8 y la 14.Otras prácticamente carecen de estos espacios como la 3 y la 5.
+
+Con este ejercicio se logra determinar que el promedio es de 5,13 m2 per cápita, muy por debajo del umbral mínimo de 9 m2 por habitante, que recomienda la organización Mundial de la Salud(ONU-hábitat 2015)
+
+---
+
+Conclusiones (2 de 2)
+
+En cuanto al arbolado vemos una situación ligeramente diferente ya que al cambiar las proporciones las comunas del oeste de la ciudad (9, 10, 11, 12) son las que tienen mejor proporción de árboles por habitante. 
+
+Respecto a la accesibilidad los espacios verdes de la periferia son los que más sufren la lejanía de una estación de Ecobici, sobre todo teniendo en cuenta los recortes realizados últimamente en el servicio.
+
+Para finalizar lo que observamos es que los espacios verdes públicos de la Ciudad Autónoma de Buenos Aires presentan una diversidad notoria en cuanto a su cantidad, calidad y acceso de acuerdo a cada comuna. Contemplando esto se podría sugerir al menos incrementar la capacidad de movilidad sustentable hacia y desde estos espacios sobre todo en la periferia.
+
+--- 
+
+Código fuente de la presentación
+
+https://github.com/ayalajoseluis/maestria
